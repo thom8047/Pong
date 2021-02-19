@@ -1,4 +1,4 @@
-class Game 
+class Board 
 {
     constructor()
     {
@@ -13,13 +13,14 @@ class Game
 
 class Pong 
 {
-    constructor(difficulty) 
+    constructor(difficulty, uP, cP) 
     {
         this.difficulty = difficulty
-        this.userPoints = 0;
-        this.compPoints = 0;
+        this.userPoints = uP;
+        this.compPoints = cP;
+        this.winner;
 
-        this.game = new Game();
+        this.game = new Board();
     }
     getMousePos(event, height)
     {
@@ -42,7 +43,8 @@ class Pong
             }
             else 
             {
-                return ['false', 1];
+                this.winner = 'user';
+                return false;
             }
         }
         else if (x <= 0)
@@ -59,10 +61,11 @@ class Pong
             else 
             {
                 //console.log(y-current_y);
-                return ['false', 0];
+                this.winner = 'comp';
+                return false;
             }
         }
-        x = x + (speed * x_dir)
+        x = x + (speed * (2) * x_dir)
 
         if (y >= this.game.canvas.height)
         {
@@ -72,7 +75,7 @@ class Pong
         {
             y_dir = y_dir * -1;
         }
-        y = y + ((speed*2) * y_dir)
+        y = y + (speed * (2) * y_dir)
 
 
         return [x, y, x_dir, y_dir, speed];
@@ -118,7 +121,7 @@ class Pong
         var canvas = this.game.canvas;
         var context = this.game.context;
         var game_int;
-        var mouse_y, current_y = 0, dampening = 20, time = 10, ball_origin = [canvas.width/2, canvas.height/2, -1, 1, 1], comp_y = 0, comp_dampening = 10;
+        var mouse_y, current_y = 0, dampening = 20, time = 10, ball_origin = [canvas.width/2, canvas.height/2, -1, 1, 1], comp_y = 0, comp_dampening = 20;
         setTimeout(() => {
             this.game.canvas.onmousemove = function(event) 
             {
@@ -137,30 +140,105 @@ class Pong
                 current_y -= diff;
             }
             // getCompPos
-            if (ball_origin[1] > comp_y)
+            if ((ball_origin[0] > canvas.width/2) && (ball_origin[2] == 1))
             {
-                var diff = (Math.abs(ball_origin[1]-comp_y)/comp_dampening);
-                comp_y += diff;
-            }
-            else if (ball_origin[1] < comp_y)
-            {
-                var diff = (Math.abs(ball_origin[1]-comp_y)/comp_dampening);
-                comp_y -= diff;
+                if (ball_origin[1] > comp_y)
+                {
+                    var diff = (Math.abs(ball_origin[1]-comp_y)/comp_dampening);
+                    comp_y += diff;
+                }
+                else if (ball_origin[1] < comp_y)
+                {
+                    var diff = (Math.abs(ball_origin[1]-comp_y)/comp_dampening);
+                    comp_y -= diff;
+                }
             }
         });
-
-        game_int = setInterval(() => {
-            ball_origin = this.getBallPos(ball_origin, current_y, comp_y)
-            if (ball_origin == false)
-            {
-                clearInterval(game_int);
-                console.log('end')
-            }
-            this.render(context, current_y, canvas, ball_origin[0], ball_origin[1], comp_y)
-        }, time);
+        return new Promise((resolve, reject) => 
+        {
+            game_int = setInterval(() => {
+                ball_origin = this.getBallPos(ball_origin, current_y, comp_y)
+                if (ball_origin == false)
+                {
+                    clearInterval(game_int);
+                    //console.log(this.winner);
+                    resolve(this.winner);
+                }
+                this.render(context, current_y, canvas, ball_origin[0], ball_origin[1], comp_y)
+            }, time);
+        });
     }
 }
 
-pong = new Pong('easy');
-pong.start();
+class Game
+{
+    constructor(difficulty, max_points)
+    {
+        this.diff = difficulty;
+        this.uP = 0;
+        this.cP = 0;
+        this.max = max_points;
+        // this.winner = false;
+        this.pong = new Pong(this.diff, this.uP, this.cP);
+    }
+
+    startGame()
+    {
+        this.pong.start()
+        .then(response => 
+            {
+                var timer, time = 3, winner = [false, ''];
+
+                if (response == 'comp') 
+                {
+                    this.pong.compPoints += 1;
+                    if (this.pong.compPoints == this.max) {winner[0] = true; winner[1] = response;}
+                }
+                else if (response == 'user')
+                {
+                    this.pong.userPoints += 1;
+                    if (this.pong.userPoints == this.max) {winner[0] = true; winner[1] = response;}
+                }
+                console.log(winner[0])
+                if (!(winner[0]))
+                {
+                    this.pong.game.context.fillStyle = 'white';
+                    this.pong.game.context.fillRect(0, 0, this.pong.game.canvas.width, this.pong.game.canvas.height);
+                    timer = setInterval(() => 
+                    {
+                        time -= 0.1;
+                        
+                        this.pong.game.context.fillStyle = 'white';
+                        this.pong.game.context.fillRect(0, 0, this.pong.game.canvas.width, this.pong.game.canvas.height);
+
+                        this.pong.game.context.fillStyle = 'black';
+                        this.pong.game.context.fillText('Winner: ' + response, this.pong.game.canvas.width/2, this.pong.game.canvas.height/2);
+                        this.pong.game.context.fillText('New game begins in: ' + time.toFixed(1), this.pong.game.canvas.width/2, this.pong.game.canvas.height/1.5);
+                    }, 100);
+                    setTimeout(() => 
+                    {
+                        clearInterval(timer)
+                        this.startFullGame();
+                    }, (time*1000));
+                }
+                else
+                {
+                    this.pong.game.context.fillStyle = 'white';
+                    this.pong.game.context.fillRect(0, 0, this.pong.game.canvas.width, this.pong.game.canvas.height);
+
+                    this.pong.game.context.fillStyle = 'black';
+                    this.pong.game.context.fillText('Game Winner: ' + response + '!', this.pong.game.canvas.width/2, this.pong.game.canvas.height/2);
+                }
+            });
+    }
+
+    startFullGame()
+    {
+        this.startGame();
+    }
+}
+
+game = new Game('easy', 7);
+game.startFullGame();
+
 //pong.start();
